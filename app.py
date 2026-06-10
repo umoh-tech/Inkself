@@ -1,13 +1,13 @@
 import os
 import json
-import anthropic
+import google.generativeai as genai
 from flask import Flask, request, jsonify, render_template, Response, stream_with_context
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
 
 @app.route("/")
@@ -54,14 +54,14 @@ def generate():
     )
 
     def stream_response():
-        with client.messages.stream(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1500,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-        ) as stream:
-            for text in stream.text_stream:
-                yield f"data: {json.dumps({'text': text})}\n\n"
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=system,
+        )
+        response = model.generate_content(prompt, stream=True)
+        for chunk in response:
+            if chunk.text:
+                yield f"data: {json.dumps({'text': chunk.text})}\n\n"
         yield "data: [DONE]\n\n"
 
     return Response(
@@ -82,3 +82,4 @@ def health():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
