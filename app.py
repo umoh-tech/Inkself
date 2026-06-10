@@ -6,13 +6,54 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB max upload
 
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/upload", methods=["POST"])
+def upload():
+    """Extract text from uploaded .txt, .md, or .docx files"""
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    filename = file.filename.lower()
+
+    try:
+        if filename.endswith(".txt") or filename.endswith(".md"):
+            text = file.read().decode("utf-8", errors="ignore")
+
+        elif filename.endswith(".docx"):
+            import zipfile
+            import xml.etree.ElementTree as ET
+            file_bytes = file.read()
+            import io
+            with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+                with z.open("word/document.xml") as doc_xml:
+                    tree = ET.parse(doc_xml)
+                    root = tree.getroot()
+                    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+                    paragraphs = root.findall(".//w:p", ns)
+                    text = "\n".join(
+                        "".join(t.text or "" for t in p.findall(".//w:t", ns))
+                        for p in paragraphs
+                    ).strip()
+        else:
+            return jsonify({"error": "Unsupported file type. Please upload .txt, .md, or .docx"}), 400
+
+        if not text.strip():
+            return jsonify({"error": "File appears to be empty"}), 400
+
+        return jsonify({"text": text, "words": len(text.split())})
+
+    except Exception as e:
+        return jsonify({"error": f"Could not read file: {str(e)}"}), 500
 
 
 @app.route("/api/generate", methods=["POST"])
@@ -82,4 +123,3 @@ def health():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
-
