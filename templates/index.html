@@ -193,9 +193,27 @@
   <div class="panel active" id="tab-style">
     <div class="card">
       <div class="card-title">Teach the AI your writing style</div>
-      <div class="card-desc">Paste excerpts from your books, articles, or any of your writing. The more samples you add, the better the AI mimics your unique voice, rhythm, and vocabulary.</div>
+      <div class="card-desc">Upload a file from your book or writing, or paste text directly. Supported: <strong>.txt, .md, .docx</strong>. The more you add, the better the AI learns your voice.</div>
+
+      <div id="upload-zone" onclick="document.getElementById('file-input').click()"
+        style="border: 2px dashed var(--paper-deep); border-radius: var(--radius); padding: 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 1rem; background: var(--paper);"
+        ondragover="event.preventDefault(); this.style.borderColor='var(--gold)'; this.style.background='#fffdf0'"
+        ondragleave="this.style.borderColor='var(--paper-deep)'; this.style.background='var(--paper)'"
+        ondrop="handleDrop(event)">
+        <div style="font-size: 28px; margin-bottom: 6px;">📄</div>
+        <div style="font-size: 14px; font-weight: 500; color: var(--ink-soft)">Click to upload or drag &amp; drop</div>
+        <div style="font-size: 12px; color: var(--ink-faint); margin-top: 4px">.txt, .md, or .docx — max 10MB</div>
+        <input type="file" id="file-input" accept=".txt,.md,.docx" style="display:none" onchange="handleFileUpload(this.files[0])">
+      </div>
+
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom: 1rem;">
+        <div style="flex:1; height:1px; background:var(--paper-deep)"></div>
+        <span style="font-size:12px; color:var(--ink-faint)">or paste text</span>
+        <div style="flex:1; height:1px; background:var(--paper-deep)"></div>
+      </div>
+
       <label class="field-label">Paste a writing sample</label>
-      <textarea id="sample-input" rows="7" placeholder="Paste a paragraph or more from your own writing here…"></textarea>
+      <textarea id="sample-input" rows="5" placeholder="Paste a paragraph or more from your own writing here…"></textarea>
       <div class="row" style="margin-top: 12px;">
         <button class="btn btn-primary" onclick="addSample()">+ Add sample</button>
         <span id="sample-status" class="status"></span>
@@ -291,6 +309,39 @@
   let lastOutput = '';
   let lastPrompt = '';
 
+  // ── FILE UPLOAD ──
+  function handleDrop(e) {
+    e.preventDefault();
+    const zone = document.getElementById('upload-zone');
+    zone.style.borderColor = 'var(--paper-deep)';
+    zone.style.background = 'var(--paper)';
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileUpload(file);
+  }
+
+  async function handleFileUpload(file) {
+    if (!file) return;
+    const status = document.getElementById('sample-status');
+    status.innerHTML = '<div class="spinner"></div> Reading file…';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.error) { status.innerHTML = '⚠ ' + data.error; return; }
+      samples.push({ text: data.text, added: new Date().toLocaleDateString(), filename: file.name });
+      save();
+      renderSamples();
+      status.innerHTML = '';
+      toast('✓ ' + file.name + ' added (' + data.words + ' words)');
+      document.getElementById('file-input').value = '';
+    } catch(e) {
+      status.innerHTML = '⚠ Upload failed';
+    }
+  }
+
   function save() {
     localStorage.setItem(STORAGE_KEYS.samples, JSON.stringify(samples));
     localStorage.setItem(STORAGE_KEYS.corrections, JSON.stringify(corrections));
@@ -349,7 +400,7 @@
       <div class="sample-item">
         <div style="flex:1">
           <div class="sample-preview">${s.text.slice(0, 160)}${s.text.length > 160 ? '…' : ''}</div>
-          <div class="sample-meta">${s.text.split(' ').length} words · Added ${s.added}</div>
+          <div class="sample-meta">${s.filename ? '📄 ' + s.filename + ' · ' : ''}${s.text.split(' ').length} words · Added ${s.added}</div>
         </div>
         <button class="del-btn" onclick="deleteSample(${i})" title="Remove">×</button>
       </div>
