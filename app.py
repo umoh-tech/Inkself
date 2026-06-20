@@ -1,6 +1,6 @@
 import os
 import json
-import google.generativeai as genai
+from groq import Groq
 from flask import Flask, request, jsonify, render_template, Response, stream_with_context
 from flask_cors import CORS
 
@@ -8,7 +8,7 @@ app = Flask(__name__)
 CORS(app)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB max upload
 
-genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 
 @app.route("/")
@@ -32,8 +32,8 @@ def upload():
         elif filename.endswith(".docx"):
             import zipfile
             import xml.etree.ElementTree as ET
-            file_bytes = file.read()
             import io
+            file_bytes = file.read()
             with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
                 with z.open("word/document.xml") as doc_xml:
                     tree = ET.parse(doc_xml)
@@ -95,14 +95,19 @@ def generate():
     )
 
     def stream_response():
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
-            system_instruction=system,
+        stream = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            max_tokens=1500,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            stream=True,
         )
-        response = model.generate_content(prompt, stream=True)
-        for chunk in response:
-            if chunk.text:
-                yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield f"data: {json.dumps({'text': delta})}\n\n"
         yield "data: [DONE]\n\n"
 
     return Response(
