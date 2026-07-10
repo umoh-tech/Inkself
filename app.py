@@ -1,6 +1,6 @@
 import os
 import json
-import google.generativeai as genai
+from groq import Groq
 from flask import Flask, request, jsonify, render_template, Response, stream_with_context
 from flask_cors import CORS
 
@@ -8,8 +8,8 @@ app = Flask(__name__)
 CORS(app)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
-from groq import Groq
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
 
 @app.route("/")
 def index():
@@ -70,7 +70,7 @@ def generate():
         else "No style samples yet. Write in a clear literary fiction style."
     )
 
-    # Cap corrections: max 5 most recent, max 300 chars each
+    # Cap corrections: max 5, max 300 chars each
     MAX_CORRECTIONS = 5
     MAX_CORR_CHARS = 300
     trimmed_corrections = corrections[:MAX_CORRECTIONS]
